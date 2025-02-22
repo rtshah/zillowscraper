@@ -116,9 +116,11 @@ def scrape_zillow(zip_code):
                 ]
                 
                 details_selectors = [
-                    ".StyledPropertyCardDataArea-c11n-8-84-3__sc-yipmu-0 div:nth-child(2)",
+                    "[data-test='property-card-details']",
+                    "[data-test='beds-baths-sqft']",
+                    "[data-test='beds-baths-sqft-info']",
                     ".property-card-data",
-                    "[data-test='property-card-details']"
+                    ".list-card-details"
                 ]
                 
                 image_selectors = [
@@ -155,43 +157,82 @@ def scrape_zillow(zip_code):
                     except:
                         continue
                 
+                # Extract details text from multiple elements if needed
+                details_text = ""
                 for selector in details_selectors:
                     try:
-                        details_text = card.find_element(By.CSS_SELECTOR, selector).text
-                        property_data["details"] = details_text
-                        
-                        details_lower = details_text.lower()
-                        
-                        if "bd" in details_lower:
-                            beds = details_lower.split("bd")[0].strip().split()[-1]
-                            try:
-                                property_data["beds"] = float(beds.replace("+", ""))
-                            except:
-                                pass
-                        
-                        if "ba" in details_lower:
-                            baths = details_lower.split("ba")[0].split()[-1]
-                            try:
-                                property_data["baths"] = float(baths.replace("+", ""))
-                            except:
-                                pass
-                        
-                        if "sqft" in details_lower:
-                            sqft = details_lower.split("sqft")[0].strip().split()[-1]
-                            try:
-                                property_data["sqft"] = int(sqft.replace(",", ""))
-                            except:
-                                pass
-                        
-                        property_types = ["apartment", "house", "condo", "townhouse"]
-                        for ptype in property_types:
-                            if ptype in details_lower:
-                                property_data["property_type"] = ptype
-                                break
-                        
-                        break
+                        elements = card.find_elements(By.CSS_SELECTOR, selector)
+                        for element in elements:
+                            details_text += element.text + " "
+                        if details_text.strip():
+                            break
                     except:
                         continue
+                
+                property_data["details"] = details_text.strip()
+                
+                # Parse the details text
+                if details_text:
+                    details_lower = details_text.lower()
+                    
+                    # Extract beds (handle both "Studio" and numeric values)
+                    if "studio" in details_lower:
+                        property_data["beds"] = 0
+                    elif "bd" in details_lower:
+                        try:
+                            beds_text = details_lower.split("bd")[0].strip().split()[-1]
+                            property_data["beds"] = float(beds_text.replace("+", ""))
+                        except:
+                            pass
+                    
+                    # Extract baths
+                    if "ba" in details_lower:
+                        try:
+                            # Look for patterns like "2 ba" or "2.5 ba"
+                            bath_text = details_lower.split("ba")[0].strip()
+                            # Extract the last number before "ba"
+                            numbers = [float(s.replace("+", "")) for s in bath_text.split() if s.replace(".", "").replace("+", "").isdigit()]
+                            if numbers:
+                                # Take the last number that's reasonable for baths (less than 10)
+                                reasonable_baths = [n for n in numbers if n < 10]
+                                if reasonable_baths:
+                                    property_data["baths"] = reasonable_baths[-1]
+                        except:
+                            pass
+                    
+                    # Extract sqft
+                    if "sqft" in details_lower:
+                        try:
+                            # Look for patterns like "1,234 sqft" or "1234 sqft"
+                            sqft_text = details_lower.split("sqft")[0].strip()
+                            # Extract the last number before "sqft"
+                            numbers = [int(s.replace(",", "").replace("+", "")) 
+                                     for s in sqft_text.split() 
+                                     if s.replace(",", "").replace("+", "").isdigit()]
+                            if numbers:
+                                # Take the last number that's reasonable for sqft (between 100 and 10000)
+                                reasonable_sqft = [n for n in numbers if 100 <= n <= 10000]
+                                if reasonable_sqft:
+                                    property_data["sqft"] = reasonable_sqft[-1]
+                        except:
+                            pass
+                    
+                    # Extract property type (improved detection)
+                    property_types = {
+                        "apartment": ["apartment", "apt", "unit"],
+                        "house": ["house", "home", "single family"],
+                        "condo": ["condo", "condominium"],
+                        "townhouse": ["townhouse", "townhome", "town house"]
+                    }
+                    
+                    for ptype, keywords in property_types.items():
+                        if any(keyword in details_lower for keyword in keywords):
+                            property_data["property_type"] = ptype
+                            break
+                    
+                    # If no property type found but it's a rental listing, assume apartment
+                    if not property_data["property_type"] and "for rent" in details_lower:
+                        property_data["property_type"] = "apartment"
                 
                 for selector in image_selectors:
                     try:
