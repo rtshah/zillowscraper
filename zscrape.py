@@ -63,10 +63,9 @@ def scrape_zillow(zip_code):
     
     try:
         page = 1
-        while True:  # Continue until we run out of pages
+        while True:
             print(f"\nScraping page {page}...")
             
-            # Construct URL with pagination
             if page == 1:
                 url = f"https://www.zillow.com/houston-tx-{zip_code}/rentals/"
             else:
@@ -75,12 +74,10 @@ def scrape_zillow(zip_code):
             print(f"Navigating to: {url}")
             driver.get(url)
             
-            # Wait for page to load
             time.sleep(5)
             
             print("Waiting for rental property cards to load...")
             
-            # Check if we've reached the end of listings
             try:
                 no_results = driver.find_elements(By.CSS_SELECTOR, ".zero-results-message")
                 if no_results:
@@ -177,7 +174,6 @@ def scrape_zillow(zip_code):
                         except:
                             continue
                     
-                    # Extract details text from multiple elements if needed
                     details_text = ""
                     for selector in details_selectors:
                         try:
@@ -191,11 +187,9 @@ def scrape_zillow(zip_code):
                     
                     property_data["details"] = details_text.strip()
                     
-                    # Parse the details text
                     if details_text:
                         details_lower = details_text.lower()
                         
-                        # Extract beds (handle both "Studio" and numeric values)
                         if "studio" in details_lower:
                             property_data["beds"] = 0
                         elif "bd" in details_lower:
@@ -205,39 +199,30 @@ def scrape_zillow(zip_code):
                             except:
                                 pass
                         
-                        # Extract baths
                         if "ba" in details_lower:
                             try:
-                                # Look for patterns like "2 ba" or "2.5 ba"
                                 bath_text = details_lower.split("ba")[0].strip()
-                                # Extract the last number before "ba"
                                 numbers = [float(s.replace("+", "")) for s in bath_text.split() if s.replace(".", "").replace("+", "").isdigit()]
                                 if numbers:
-                                    # Take the last number that's reasonable for baths (less than 10)
                                     reasonable_baths = [n for n in numbers if n < 10]
                                     if reasonable_baths:
                                         property_data["baths"] = reasonable_baths[-1]
                             except:
                                 pass
                         
-                        # Extract sqft
                         if "sqft" in details_lower:
                             try:
-                                # Look for patterns like "1,234 sqft" or "1234 sqft"
                                 sqft_text = details_lower.split("sqft")[0].strip()
-                                # Extract the last number before "sqft"
                                 numbers = [int(s.replace(",", "").replace("+", "")) 
                                          for s in sqft_text.split() 
                                          if s.replace(",", "").replace("+", "").isdigit()]
                                 if numbers:
-                                    # Take the last number that's reasonable for sqft (between 100 and 10000)
                                     reasonable_sqft = [n for n in numbers if 100 <= n <= 10000]
                                     if reasonable_sqft:
                                         property_data["sqft"] = reasonable_sqft[-1]
                             except:
                                 pass
                         
-                        # Extract property type (improved detection)
                         property_types = {
                             "apartment": ["apartment", "apt", "unit"],
                             "house": ["house", "home", "single family"],
@@ -250,7 +235,6 @@ def scrape_zillow(zip_code):
                                 property_data["property_type"] = ptype
                                 break
                         
-                        # If no property type found but it's a rental listing, assume apartment
                         if not property_data["property_type"] and "for rent" in details_lower:
                             property_data["property_type"] = "apartment"
                     
@@ -292,7 +276,6 @@ def scrape_zillow(zip_code):
                     print(f"Error extracting rental card {index} on page {page}: {e}")
                     continue
             
-            # Save progress after each page
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"zillow_rentals_{timestamp}_progress.json"
             try:
@@ -302,7 +285,6 @@ def scrape_zillow(zip_code):
             except Exception as e:
                 print(f"Error saving progress to JSON: {e}")
             
-            # Check if there's a next page button
             try:
                 next_button = driver.find_element(By.CSS_SELECTOR, "a[title='Next page']")
                 if not next_button.is_enabled():
@@ -313,7 +295,6 @@ def scrape_zillow(zip_code):
                 break
             
             page += 1
-            # Add a delay between pages to avoid rate limiting
             time.sleep(random.uniform(3, 5))
     
     except TimeoutException:
@@ -327,7 +308,6 @@ def scrape_zillow(zip_code):
         except:
             pass
         
-        # Save final results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"zillow_rentals_{timestamp}_final.json"
         try:
